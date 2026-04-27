@@ -2,7 +2,7 @@
 
 ## Background
 
-You are extending the packet parser built in Stage 1. The parser already handles a
+You are extending the packet parser you built in Stage 1. Your parser handles a
 single packet type (temperature, `0x01`) and delivers every valid packet to one
 shared callback registered at init time.
 

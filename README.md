@@ -4,15 +4,19 @@ A lightweight, state-machine-based byte-stream packet parser written in C11.
 
 ## Time Estimate
 
-45 – 60 minutes
+60 – 90 minutes
 
 ---
 
-## Your Task
+## Overview
 
-This task has two stages. **Stage 1 is fully implemented** as your starting point — read through it before writing any code. Your job is to complete **Stage 2**.
+This task is structured in two stages. Complete them in order — Stage 2 builds
+directly on your Stage 1 implementation.
 
-Full requirements: [`docs/stage2_requirements.md`](docs/stage2_requirements.md)
+| Stage | Task | Tests |
+|-------|------|-------|
+| [Stage 1](docs/stage1_overview.md) | Implement the core byte-stream packet parser | 13 |
+| [Stage 2](docs/stage2_requirements.md) | Extend it with per-type handler dispatch | +6 |
 
 ---
 
@@ -30,62 +34,38 @@ Every packet follows this fixed framing:
 
 ## Packet Types
 
-| Type   | Name        | Payload                                                         |
-|--------|-------------|-----------------------------------------------------------------|
-| `0x01` | Temperature | 2-byte signed `int16`, little-endian (units: 0.1 °C)           |
-| `0x02` | Humidity    | 2-byte unsigned `uint16`, little-endian (units: 0.1 % RH) — **added in Stage 2** |
+| Type   | Name        | Payload                                                            |
+|--------|-------------|--------------------------------------------------------------------|
+| `0x01` | Temperature | 2-byte signed `int16`, little-endian (units: 0.1 °C)              |
+| `0x02` | Humidity    | 2-byte unsigned `uint16`, little-endian (units: 0.1 % RH) — Stage 2 |
 
 ---
 
-## Stage 1 — Provided
+## Stage 1 — Implement the Parser
 
-`parser.c` and `parser.h` implement a single-type packet parser. The core is a
-5-state machine that consumes a raw byte stream and frames packets:
+See [`docs/stage1_overview.md`](docs/stage1_overview.md) for the full task
+description, API contract, behavioral requirements, and test coverage.
 
-```
-WAIT_START → READ_TYPE → READ_LEN → READ_PAYLOAD → READ_CHECKSUM
-```
-
-On a valid checksum, a single shared callback fires with the packet's type,
-payload pointer, and length. Any byte that does not fit the current state — a
-bad checksum, an oversized length field, or noise between packets — resets
-the state machine to `WAIT_START`.
-
-For a detailed walkthrough of the existing code, see
-[`docs/stage1_overview.md`](docs/stage1_overview.md).
-
-### Current API (Stage 1)
+### API to implement
 
 ```c
-#define START_BYTE          0xAAu
-#define MAX_PAYLOAD_LEN     64u
-
-#define PACKET_TYPE_TEMPERATURE  0x01u
-
-typedef void (*packet_cb_t)(uint8_t type, const uint8_t *payload, uint8_t len);
-
 void parser_init(packet_cb_t callback);
 void parser_feed(uint8_t byte);
+
+typedef void (*packet_cb_t)(uint8_t type, const uint8_t *payload, uint8_t len);
 ```
 
-- **`parser_init(callback)`** — resets all parser state and registers a single
-  callback that will fire for every valid packet, regardless of type.
-- **`parser_feed(byte)`** — processes one byte of the incoming stream. Call
-  repeatedly as bytes arrive (e.g. from a UART receive interrupt).
+The state machine skeleton and internal data structures are already in `parser.c`.
+You only need to fill in the function bodies.
 
 ---
 
-## Stage 2 — Your Task
+## Stage 2 — Per-Type Handler Dispatch
 
-The device streams multiple sensor readings over the same UART. Each reading has
-its own type and its own consumer in application code. Routing all packets
-through a single callback forces the application to `switch` on type — the
-parser should own that dispatch instead.
+See [`docs/stage2_requirements.md`](docs/stage2_requirements.md) for the full
+task description.
 
-Your task is to extend the parser with a **per-type handler table** and add
-support for a second packet type (`0x02` — humidity).
-
-### API Changes
+### API changes
 
 Replace `parser_init(callback)` with:
 
@@ -93,9 +73,6 @@ Replace `parser_init(callback)` with:
 void parser_init(void);
 int  parser_register_handler(uint8_t type, packet_cb_t cb);
 ```
-
-See [`docs/stage2_requirements.md`](docs/stage2_requirements.md) for the
-complete specification, behavioral requirements, and testing checklist.
 
 ---
 
@@ -108,33 +85,20 @@ make run
 Builds with GCC (`-Wall -Wextra -Werror -std=c11`) and AddressSanitizer +
 UBSan enabled, then runs the test suite.
 
-### Starting state (Stage 1 passing)
+### After Stage 1
 
 ```
 === Packet Parser — Test Suite ===
 
 -- Stage 1 --
   [PASS] test_valid_temp_positive
-  [PASS] test_valid_temp_negative
-  [PASS] test_valid_temp_zero
-  [PASS] test_bad_checksum_no_callback
-  [PASS] test_corrupted_payload_byte
-  [PASS] test_noise_before_valid_packet
-  [PASS] test_two_sequential_packets
-  [PASS] test_recovery_after_bad_checksum
-  [PASS] test_oversized_length_resets_parser
-  [PASS] test_partial_packet_no_callback
-  [PASS] test_start_byte_value_in_payload
-  [PASS] test_noise_between_packets
+  ...
   [PASS] test_no_handler_safe
-
--- Stage 2 --
-  (not yet implemented)
 
   13 / 13 passed
 ```
 
-### Goal (Stage 2 complete)
+### After Stage 2
 
 ```
 === Packet Parser — Test Suite ===
@@ -157,7 +121,7 @@ UBSan enabled, then runs the test suite.
 
 ## Reference Documents
 
-| Document | Audience | Description |
-|----------|----------|-------------|
-| [`docs/stage1_overview.md`](docs/stage1_overview.md) | Candidate | Walkthrough of the Stage 1 implementation |
-| [`docs/stage2_requirements.md`](docs/stage2_requirements.md) | Candidate | Stage 2 task specification |
+| Document | Description |
+|----------|-------------|
+| [`docs/stage1_overview.md`](docs/stage1_overview.md) | Stage 1 task specification |
+| [`docs/stage2_requirements.md`](docs/stage2_requirements.md) | Stage 2 task specification |
