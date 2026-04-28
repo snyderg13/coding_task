@@ -35,7 +35,7 @@ static void test_end(const char *name) {
 } while (0)
 
 /* -------------------------------------------------------------------------
- * Callback capture — primary (used for temperature in multi-type tests)
+ * Callback capture
  * ------------------------------------------------------------------------- */
 
 static struct {
@@ -54,26 +54,6 @@ static void capture_cb(uint8_t type, const uint8_t *payload, uint8_t len) {
     cb_state.last_type = type;
     cb_state.last_len  = len;
     memcpy(cb_state.last_payload, payload, len);
-}
-
-/* Secondary capture state — used for humidity in multi-type dispatch tests */
-
-static struct {
-    int     call_count;
-    uint8_t last_type;
-    uint8_t last_payload[MAX_PAYLOAD_LEN];
-    uint8_t last_len;
-} cb_state2;
-
-static void reset_cb2(void) {
-    memset(&cb_state2, 0, sizeof(cb_state2));
-}
-
-static void capture_cb2(uint8_t type, const uint8_t *payload, uint8_t len) {
-    cb_state2.call_count++;
-    cb_state2.last_type = type;
-    cb_state2.last_len  = len;
-    memcpy(cb_state2.last_payload, payload, len);
 }
 
 /* -------------------------------------------------------------------------
@@ -109,22 +89,9 @@ static size_t make_temp_packet(uint8_t *buf, int16_t temp) {
     return make_packet(buf, PACKET_TYPE_TEMPERATURE, payload, 2);
 }
 
-/* TYPE=0x02 humidity packet (uint16_t, LE, units: 0.1% RH). */
-static size_t make_humidity_packet(uint8_t *buf, uint16_t rh) {
-    uint8_t payload[2];
-    payload[0] = (uint8_t)(rh & 0xFFu);
-    payload[1] = (uint8_t)(rh >> 8);
-    return make_packet(buf, PACKET_TYPE_HUMIDITY, payload, 2);
-}
-
 /* Decodes a 2-byte LE int16_t from a payload buffer. */
 static int16_t decode_temp(const uint8_t *payload) {
     return (int16_t)((uint16_t)payload[0] | ((uint16_t)payload[1] << 8));
-}
-
-/* Decodes a 2-byte LE uint16_t from a payload buffer. */
-static uint16_t decode_humidity(const uint8_t *payload) {
-    return (uint16_t)((uint16_t)payload[0] | ((uint16_t)payload[1] << 8));
 }
 
 static void feed(const uint8_t *data, size_t len) {
@@ -139,8 +106,7 @@ static void feed(const uint8_t *data, size_t len) {
 
 static void test_valid_temp_positive(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 250);   /* 250 = 25.0 °C */
@@ -154,8 +120,7 @@ static void test_valid_temp_positive(void) {
 
 static void test_valid_temp_negative(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, -100);  /* -100 = -10.0 °C */
@@ -167,8 +132,7 @@ static void test_valid_temp_negative(void) {
 
 static void test_valid_temp_zero(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 0);
@@ -180,8 +144,7 @@ static void test_valid_temp_zero(void) {
 
 static void test_bad_checksum_no_callback(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 250);
@@ -193,8 +156,7 @@ static void test_bad_checksum_no_callback(void) {
 
 static void test_corrupted_payload_byte(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 250);
@@ -206,8 +168,7 @@ static void test_corrupted_payload_byte(void) {
 
 static void test_noise_before_valid_packet(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t noise[] = { 0x00, 0x11, 0x22, 0x55, 0x77, 0xBB, 0xDE, 0xAD };
     feed(noise, sizeof(noise));
@@ -223,8 +184,7 @@ static void test_noise_before_valid_packet(void) {
 
 static void test_two_sequential_packets(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n;
@@ -241,8 +201,7 @@ static void test_two_sequential_packets(void) {
 
 static void test_recovery_after_bad_checksum(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n;
@@ -260,8 +219,7 @@ static void test_recovery_after_bad_checksum(void) {
 
 static void test_oversized_length_resets_parser(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     /* Manually craft a packet with LEN > MAX_PAYLOAD_LEN */
     uint8_t bad[] = { START_BYTE, 0x01, MAX_PAYLOAD_LEN + 1, 0x00, 0x00 };
@@ -277,8 +235,7 @@ static void test_oversized_length_resets_parser(void) {
 
 static void test_partial_packet_no_callback(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 123);
@@ -290,8 +247,7 @@ static void test_partial_packet_no_callback(void) {
 /* 0xAA is START_BYTE; it must be legal as a payload data value. */
 static void test_start_byte_value_in_payload(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     /* Temperature 0x00AA: payload bytes are [0xAA, 0x00] */
     uint8_t pkt[64];
@@ -305,8 +261,7 @@ static void test_start_byte_value_in_payload(void) {
 
 static void test_noise_between_packets(void) {
     reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
+    parser_init(capture_cb);
 
     uint8_t pkt[64];
     size_t n;
@@ -324,130 +279,16 @@ static void test_noise_between_packets(void) {
     CHECK(decode_temp(cb_state.last_payload) == 400, "second packet value correct");
 }
 
-/* The parser must not crash or fire when no handler is registered. */
+/* The parser must not crash or fire when no callback is registered. */
 static void test_no_handler_safe(void) {
-    parser_init();   /* no handlers registered */
+    parser_init(NULL);   /* no callback */
     reset_cb();
 
     uint8_t pkt[64];
     size_t n = make_temp_packet(pkt, 250);
     feed(pkt, n);
 
-    CHECK(cb_state.call_count == 0, "no callback fires with no handler registered");
-}
-
-/* -------------------------------------------------------------------------
- * Stage 2 tests
- * ------------------------------------------------------------------------- */
-
-static void test_humidity_valid(void) {
-    reset_cb2();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_HUMIDITY, capture_cb2);
-
-    uint8_t pkt[64];
-    size_t n = make_humidity_packet(pkt, 555);  /* 555 = 55.5% RH */
-    feed(pkt, n);
-
-    CHECK(cb_state2.call_count == 1,              "humidity callback called once");
-    CHECK(cb_state2.last_type  == 0x02,           "type field is 0x02");
-    CHECK(cb_state2.last_len   == 2,              "payload length is 2");
-    CHECK(decode_humidity(cb_state2.last_payload) == 555, "decoded humidity is 555");
-}
-
-static void test_dispatch_to_correct_handler(void) {
-    reset_cb();
-    reset_cb2();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
-    parser_register_handler(PACKET_TYPE_HUMIDITY,    capture_cb2);
-
-    uint8_t pkt[64];
-    size_t n;
-
-    n = make_temp_packet(pkt, 220);      /* 22.0 °C */
-    feed(pkt, n);
-
-    n = make_humidity_packet(pkt, 600);  /* 60.0% RH */
-    feed(pkt, n);
-
-    CHECK(cb_state.call_count  == 1, "temperature handler called once");
-    CHECK(cb_state2.call_count == 1, "humidity handler called once");
-    CHECK(decode_temp(cb_state.last_payload)      == 220, "temperature value correct");
-    CHECK(decode_humidity(cb_state2.last_payload) == 600, "humidity value correct");
-}
-
-static void test_unregistered_type_ignored(void) {
-    reset_cb();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
-
-    /* Send a humidity packet — no handler registered for 0x02 */
-    uint8_t pkt[64];
-    size_t n = make_humidity_packet(pkt, 500);
-    feed(pkt, n);
-
-    CHECK(cb_state.call_count == 0, "no callback for unregistered packet type");
-}
-
-static void test_handler_overwrite(void) {
-    reset_cb();
-    reset_cb2();
-    parser_init();
-
-    /* Register capture_cb, then overwrite with capture_cb2 for the same type */
-    int r1 = parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
-    int r2 = parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb2);
-
-    CHECK(r1 == 0, "first registration succeeds");
-    CHECK(r2 == 0, "overwrite registration succeeds");
-
-    uint8_t pkt[64];
-    size_t n = make_temp_packet(pkt, 111);
-    feed(pkt, n);
-
-    CHECK(cb_state.call_count  == 0, "original handler not called after overwrite");
-    CHECK(cb_state2.call_count == 1, "new handler called after overwrite");
-}
-
-static void test_handler_table_full(void) {
-    parser_init();
-
-    /* Fill the table to capacity with distinct types */
-    for (uint8_t i = 0; i < MAX_HANDLERS; i++) {
-        int r = parser_register_handler((uint8_t)(i + 1u), capture_cb);
-        CHECK(r == 0, "registration succeeds while table has space");
-    }
-
-    /* One more new type must fail */
-    int r = parser_register_handler((uint8_t)(MAX_HANDLERS + 1u), capture_cb);
-    CHECK(r == -1, "registration fails when table is full");
-
-    /* Overwriting an already-registered type must still succeed */
-    int r2 = parser_register_handler(0x01u, capture_cb);
-    CHECK(r2 == 0, "overwrite of existing type succeeds even when table is full");
-}
-
-static void test_mixed_type_sequence(void) {
-    reset_cb();
-    reset_cb2();
-    parser_init();
-    parser_register_handler(PACKET_TYPE_TEMPERATURE, capture_cb);
-    parser_register_handler(PACKET_TYPE_HUMIDITY,    capture_cb2);
-
-    uint8_t pkt[64];
-    size_t n;
-
-    /* Interleave temperature and humidity packets */
-    n = make_temp_packet(pkt,     150);  feed(pkt, n);
-    n = make_humidity_packet(pkt, 400);  feed(pkt, n);
-    n = make_temp_packet(pkt,     160);  feed(pkt, n);
-    n = make_humidity_packet(pkt, 410);  feed(pkt, n);
-
-    CHECK(cb_state.call_count  == 2, "temperature handler called twice");
-    CHECK(cb_state2.call_count == 2, "humidity handler called twice");
-    CHECK(decode_temp(cb_state.last_payload)      == 160, "last temperature correct");
-    CHECK(decode_humidity(cb_state2.last_payload) == 410, "last humidity correct");
+    CHECK(cb_state.call_count == 0, "no callback fires when none registered");
 }
 
 /* -------------------------------------------------------------------------
@@ -471,14 +312,6 @@ int main(void) {
     RUN(test_start_byte_value_in_payload);
     RUN(test_noise_between_packets);
     RUN(test_no_handler_safe);
-
-    printf("\n-- Stage 2 --\n");
-    RUN(test_humidity_valid);
-    RUN(test_dispatch_to_correct_handler);
-    RUN(test_unregistered_type_ignored);
-    RUN(test_handler_overwrite);
-    RUN(test_handler_table_full);
-    RUN(test_mixed_type_sequence);
 
     printf("\n  %d / %d passed\n\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;
